@@ -5,6 +5,79 @@ import pandas as pd
 from simulation import run_operations_simulation
 
 
+def build_process_animation(step_df, max_cases=80):
+    if step_df.empty:
+        return None
+
+    animation_df = step_df.copy()
+
+    sample_cases = animation_df["case_id"].drop_duplicates().head(max_cases)
+    animation_df = animation_df[animation_df["case_id"].isin(sample_cases)].copy()
+
+    step_order = {
+        "Intake": 1,
+        "Benefits Verification": 2,
+        "Prior Authorization": 3,
+        "Pharmacy Review": 4,
+        "Medication Fulfillment": 5,
+        "Delivery / Infusion Coordination": 6,
+    }
+
+    animation_df["step_position"] = animation_df["step"].map(step_order)
+    animation_df = animation_df.dropna(subset=["step_position"])
+
+    animation_df["time_bucket"] = (
+        animation_df["service_start_minute"] // 30 * 30
+    ).astype(int)
+
+    animation_df["case_index"] = animation_df["case_id"].rank(
+        method="dense"
+    ).astype(int)
+
+    animation_df["queue_wait_minutes"] = animation_df["queue_wait_minutes"].round(2)
+    animation_df["service_minutes"] = animation_df["service_minutes"].round(2)
+
+    animation_df["marker_size"] = animation_df["queue_wait_minutes"].clip(
+        lower=3,
+        upper=60,
+    )
+
+    fig = px.scatter(
+        animation_df,
+        x="step_position",
+        y="case_index",
+        animation_frame="time_bucket",
+        color="step",
+        size="marker_size",
+        size_max=35,
+        hover_data={
+            "case_id": True,
+            "step": True,
+            "queue_wait_minutes": True,
+            "service_minutes": True,
+            "step_position": False,
+            "case_index": False,
+            "marker_size": False,
+        },
+        title="Animated Case Flow Through the Process",
+        range_x=[0.5, 6.5],
+    )
+
+    fig.update_layout(
+        height=600,
+        xaxis=dict(
+            tickmode="array",
+            tickvals=list(step_order.values()),
+            ticktext=list(step_order.keys()),
+            title="Process Step",
+        ),
+        yaxis_title="Sampled Case",
+    )
+
+    return fig
+
+
+
 st.set_page_config(
     page_title="Alivia-style Operations Simulator",
     layout="wide"
@@ -90,7 +163,7 @@ def run_named_scenario(
     scenario_staff,
     scenario_service_times,
 ):
-    case_df, step_summary, summary = run_operations_simulation(
+    case_df, step_df, step_summary, summary = run_operations_simulation(
         referrals_per_day=referrals,
         shift_hours=shift_hours,
         target_hours=target_hours,
@@ -113,7 +186,7 @@ def run_named_scenario(
 
 
 if run_button:
-    case_df, step_summary, summary = run_operations_simulation(
+    case_df, step_df, step_summary, summary = run_operations_simulation(
         referrals_per_day=referrals_per_day,
         shift_hours=shift_hours,
         target_hours=target_hours,
@@ -165,10 +238,11 @@ if run_button:
                 "or reducing service time in the bottleneck step."
             )
 
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "Bottleneck Analysis",
             "Cycle Time",
             "Scenario Comparison",
+            "Live Process Flow",
             "Raw Data"
         ])
 
@@ -297,6 +371,34 @@ if run_button:
             )
 
         with tab4:
+            st.subheader("Live Process Flow Animation")
+
+            st.write(
+                "Each dot is a sampled synthetic case moving through the simulated process. "
+                "The x-axis shows the process step. Larger dots indicate longer queue wait "
+                "before service."
+            )
+
+            flow_fig = build_process_animation(step_df)
+
+            if flow_fig is None:
+                st.warning("No step-level data available for animation.")
+            else:
+                st.plotly_chart(flow_fig, use_container_width=True)
+
+            st.subheader("Queue Wait by Step")
+
+            fig_flow_wait = px.bar(
+                step_summary,
+                x="step",
+                y="avg_queue_wait_minutes",
+                title="Average Queue Wait by Process Step",
+                text="avg_queue_wait_minutes",
+            )
+
+            st.plotly_chart(fig_flow_wait, use_container_width=True)
+
+        with tab5:
             st.subheader("Case-Level Simulation Data")
             st.dataframe(case_df, use_container_width=True)
 

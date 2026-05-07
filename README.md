@@ -106,3 +106,8 @@ This tool can help healthcare, pharmacy, service, logistics, or back-office oper
 
 This project uses synthetic data only. It does not include real patient data, protected health information, or clinical recommendations.
 
+
+
+## Live Process Flow Animation
+
+The app includes a visual animation that samples synthetic cases and shows how work moves through the process steps. Larger dots indicate longer queue wait before service. This helps managers visually understand where work accumulates and where bottlenecks may be forming.

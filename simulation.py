@@ -126,7 +126,7 @@ def run_operations_simulation(
     step_df = pd.DataFrame(step_records)
 
     if case_df.empty or step_df.empty:
-        return case_df, pd.DataFrame(), {}
+        return case_df, pd.DataFrame(), pd.DataFrame(), {}
 
     step_summary = (
         step_df.groupby(["step_key", "step"])
@@ -173,4 +173,4 @@ def run_operations_simulation(
         "max_utilization_pct": round(float(bottleneck_row["utilization_pct"]), 2),
     }
 
-    return case_df, step_summary, summary
+    return case_df, step_df, step_summary, summary
