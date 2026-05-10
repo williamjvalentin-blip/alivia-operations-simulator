@@ -182,3 +182,295 @@ This section explains what business questions the simulator can answer, where to
 4. Read **Bottleneck Analysis** for root cause.
 5. Read **Scenario Comparison** for what action works best.
 
+
+
+---
+
+# Staffing Optimizer
+
+The project includes a separate Streamlit page called **Staffing Optimizer**.
+
+## What It Answers
+
+- What staffing level is needed to meet a target SLA?
+- What staffing level is needed to stay under a target utilization level?
+- How many additional staff are needed to avoid after-shift completion?
+- Which station should receive the next staff member?
+- Does the bottleneck shift after adding staff?
+
+## How It Works
+
+The optimizer starts from the current staffing levels. It tests adding one staff member to each allowed station, keeps the option with the best score, and repeats until the selected targets are met or the maximum extra-staff limit is reached.
+
+The optimizer score penalizes:
+
+- SLA below target
+- utilization above target
+- cases finished after shift
+- extra staff
+- average wait time
+- average cycle time
+
+This is a practical decision-support search, not a formal mathematical proof of a global optimum.
+
+## Example Targets
+
+- Target SLA compliance: 95%
+- Target max utilization: 90%
+- Max cases finished after shift: 0
+- Max extra staff allowed: 8
+
+If you want to test a 100% utilization target, set **Target max utilization %** to 100.
+
+## Optimizer Score Explanation
+
+The Staffing Optimizer includes an **Optimizer Score by Iteration** chart.
+
+The optimizer score is a penalty score. **Lower is better.**
+
+The score is not a dollar cost and not a probability. It is a weighted decision-support score used to compare staffing options during the optimizer search.
+
+The score penalizes:
+
+- SLA below the selected target
+- utilization above the selected target
+- cases finished after shift
+- extra staff added
+- average wait time
+- average cycle time
+
+Simplified logic:
+
+```text
+Optimizer Score =
+SLA gap penalty
++ utilization gap penalty
++ after-shift penalty
++ extra-staff penalty
++ wait-time penalty
++ cycle-time penalty
+```
+
+How to interpret the chart:
+
+- A falling score means each optimizer iteration is finding a better staffing pattern.
+- A flat score means adding staff is not materially improving the selected targets.
+- A rising score means the added staff is not worth the improvement under the current scoring weights.
+- The preferred solution is usually the lowest score that also meets the SLA, utilization, and after-shift targets.
+
+
+## Optimization Modes and Guardrails
+
+The app includes an **Optimization** tab with three objective modes:
+
+- **Balanced optimization**
+- **Meet SLA with minimum staff**
+- **Reduce cycle time**
+
+The optimizer includes guardrails to avoid unreasonable staffing recommendations:
+
+- It focuses first on stations above the target max utilization.
+- It rejects staffing additions that would push a station below the selected minimum utilization floor.
+- It includes a staff-cost penalty so it does not add people for tiny improvements.
+- It shows rejected staffing actions when a recommendation would create overstaffing.
+
+The utilization chart includes:
+
+- Current utilization %
+- Recommended utilization %
+- Target max utilization line
+- Minimum utilization floor line
+
+This prevents recommendations like adding staff to Intake until it falls to very low utilization while other stations remain overloaded.
+
+<!-- OPTIMIZATION_TAB_GUIDE_START -->
+
+---
+
+# Optimization Tab Guide
+
+The app includes an **Optimization** tab. This tab estimates the staffing changes needed to meet selected operational targets while avoiding unrealistic overstaffing.
+
+## What the Optimization Tab Is Intended to Answer
+
+The Optimization tab answers questions such as:
+
+- What staffing level is needed to meet a target SLA?
+- What staffing level is needed to keep station utilization under a selected target?
+- What staffing level is needed to reduce average cycle time?
+- Which station should receive the next staff member?
+- Which stations are still overloaded after optimization?
+- Which staffing additions are rejected because they would create underutilization?
+- Does the bottleneck shift after adding staff?
+- Is the recommendation reasonable from a utilization standpoint?
+
+## Optimization Objectives
+
+The user can select one of three optimization objectives.
+
+| Optimization Objective | Main Use | What It Prioritizes | When to Use |
+|---|---|---|---|
+| **Balanced optimization** | Default recommended mode | SLA, utilization, cycle time, wait time, and reasonable staffing | Use this for the most realistic staffing recommendation. |
+| **Meet SLA with minimum staff** | Labor-efficient staffing | Meeting SLA with the fewest added staff | Use this when cost control is important. |
+| **Reduce cycle time** | Faster completion | Lower average cycle time while respecting staffing guardrails | Use this when management wants faster turnaround. |
+
+## Optimization Controls
+
+| Control | What It Means | Example | How to Interpret |
+|---|---|---|---|
+| **Target SLA compliance %** | Minimum acceptable percent of cases completed within target time | 95% | The optimizer tries to reach or exceed this service level. |
+| **Target max utilization %** | Maximum acceptable utilization for the busiest station | 90% or 92% | If a station is above this line, it is considered overloaded. |
+| **Minimum recommended utilization %** | Minimum acceptable utilization after adding staff | 70% | Prevents recommendations that overstaff a station. |
+| **Max cases finished after shift** | Maximum allowed cases completed after the shift window | 0 | Helps avoid backlog/overtime risk. |
+| **Max extra staff allowed** | Maximum number of extra staff the optimizer may add | 35 | Limits the search so the recommendation stays realistic. |
+| **Staff cost penalty** | How conservative the optimizer is about adding staff | Low / Medium / High | Higher penalty means it only adds staff when the improvement is more meaningful. |
+| **Target average cycle time hours** | Desired average end-to-end case completion time | Example: 12 hours | Mainly used with the Reduce cycle time objective. |
+| **Stations optimizer can adjust** | Which process stations are allowed to receive added staff | Prior Auth, Pharmacy Review, etc. | Use this when only some teams can realistically add headcount. |
+
+## Questions the Optimization Tab Can Answer
+
+| # | Question | What to Adjust | Where to Look for the Answer | What to Look For |
+|---:|---|---|---|---|
+| 1 | What staffing is needed to meet SLA? | Set **Target SLA compliance %** | Optimization → Optimizer Recommendation | Recommended staffing change and Projected SLA. |
+| 2 | What staffing is needed to stay under utilization target? | Set **Target max utilization %** | Optimization → Station Utilization chart | Recommended utilization should fall below the target max utilization line. |
+| 3 | What staffing is needed to reduce cycle time? | Select **Reduce cycle time** and set **Target average cycle time hours** | Optimization → Avg Cycle Time metric and Search History | Avg Cycle Hours should decrease across iterations. |
+| 4 | Which station should receive the next staff member? | Run the optimizer | Optimization → Optimizer Search History | The **Action** column shows where each added staff member went. |
+| 5 | Which stations are still overloaded? | Set utilization target and run optimizer | Optimization → Station Utilization chart | Stations above the target line remain overloaded. |
+| 6 | Is the recommendation creating overstaffing? | Set **Minimum recommended utilization %** | Optimization → Station Utilization chart and Rejected Staffing Actions | Stations below the floor may be overstaffed; rejected actions explain what was blocked. |
+| 7 | Why did the optimizer reject a staffing action? | Run optimizer with utilization floor | Optimization → Rejected Staffing Actions | Shows the station and reason, such as projected utilization below the floor. |
+| 8 | Does the bottleneck shift after adding staff? | Run optimizer | Optimization → Remaining Bottleneck and Search History | If the bottleneck changes, the original constraint was relieved and another station became the next constraint. |
+| 9 | Is adding staff worth it? | Change **Staff cost penalty** | Optimization → Optimizer Score and staffing recommendation | Higher cost penalty makes the model more conservative. |
+| 10 | Can we avoid overtime/backlog? | Set **Max cases finished after shift** to 0 | Optimization → After Shift Cases | Target is met when after-shift cases are at or below the selected value. |
+| 11 | Should we use a safer capacity target? | Use Target max utilization of 85–92% | Optimization → Station Utilization chart | Lower targets create more buffer but may require more staff. |
+| 12 | Can stations run closer to full capacity? | Use Target max utilization of 100% | Optimization → Station Utilization chart | Allows higher utilization but creates less buffer for variation. |
+| 13 | Which teams are impossible to fix with staffing alone? | Run optimizer with max extra staff allowed | Optimization → Optimizer message and remaining overloaded stations | If targets are not reached, process time reduction may be required. |
+| 14 | What if only some teams can add staff? | Limit **Stations optimizer can adjust** | Optimization → Recommendation and Search History | Shows best staffing plan using only allowed stations. |
+| 15 | What if adding staff makes Intake too low-utilized? | Set Minimum utilization floor, e.g. 70% | Optimization → Rejected Staffing Actions | The optimizer should reject additions that push Intake below the floor. |
+| 16 | How much staff is added in total? | Run optimizer | Optimization → Current vs Recommended Staffing | Look at the **Change** column and Total Staff in Search History. |
+| 17 | Which iteration produced the best operating plan? | Run optimizer | Optimization → Optimizer Score by Iteration | Lower score is better; preferred solution meets targets without violating guardrails. |
+| 18 | Is the selected target too aggressive? | Run optimizer | Optimization → Optimizer message | If target is not reached within max extra staff, target may be too aggressive or process improvement is needed. |
+| 19 | Are we solving the real bottleneck first? | Run optimizer | Optimization → Search History and Station Utilization chart | Added staff should go first to overloaded/high-utilization stations. |
+| 20 | What happens if I change demand before optimizing? | Change sidebar **Referrals / prescriptions per day**, then run simulation and optimizer | Executive Summary + Optimization | Higher demand should affect required staffing and utilization. |
+
+## How the Optimizer Works
+
+The optimizer starts with the current staffing levels from the sidebar.
+
+Then it repeats this process:
+
+1. Runs the current simulation.
+2. Finds stations above the selected max-utilization target.
+3. Tests adding one staff member to eligible stations.
+4. Rejects staffing additions that would push a station below the minimum utilization floor.
+5. Scores each candidate staffing plan.
+6. Keeps the best-scoring option.
+7. Repeats until targets are met or the max extra staff limit is reached.
+
+This is a practical decision-support search. It is not a formal mathematical proof of a global optimum.
+
+## Guardrails Added to Avoid Unreasonable Recommendations
+
+The optimizer includes guardrails so it does not recommend adding staff to a station that is already underutilized while other stations remain overloaded.
+
+| Guardrail | Purpose |
+|---|---|
+| **Focus on overloaded stations first** | If any station is above the target utilization line, the optimizer prioritizes those stations. |
+| **Minimum utilization floor** | Prevents adding staff when the result would make that station too underutilized. |
+| **Rejected Staffing Actions table** | Shows when the optimizer blocks a staffing action and explains why. |
+| **Staff cost penalty** | Prevents adding extra people for small improvements. |
+| **Station utilization chart** | Makes it visible whether the recommendation is reasonable. |
+
+## Optimizer Score Explanation
+
+The **Optimizer Score by Iteration** chart shows a penalty score.
+
+**Lower is better.**
+
+The score is not a dollar cost and not a probability. It is a weighted decision-support score used to compare staffing options.
+
+The score penalizes:
+
+- SLA below target
+- utilization above target
+- utilization below the minimum floor
+- cases finished after shift
+- extra staff added
+- average wait time
+- average cycle time
+
+Simplified logic:
+
+```text
+Optimizer Score =
+SLA gap penalty
++ utilization-above-target penalty
++ utilization-below-floor penalty
++ after-shift penalty
++ extra-staff penalty
++ wait-time penalty
++ cycle-time penalty
+```
+
+## How to Interpret the Optimization Charts
+
+| Chart / Table | What It Tells You |
+|---|---|
+| **Current vs Recommended Staffing** | Shows how many staff are recommended by station. |
+| **Station Utilization: Current vs Recommended** | Shows whether each station moves closer to the utilization target. |
+| **Target max utilization line** | Stations above this line are still overloaded. |
+| **Minimum utilization floor line** | Stations below this line may be overstaffed. |
+| **Rejected Staffing Actions** | Shows which staffing additions were blocked and why. |
+| **Optimizer Search History** | Shows each iteration and where the optimizer added staff. |
+| **SLA / Max Utilization / Cycle Time chart** | Shows whether operational performance improves over iterations. |
+| **Optimizer Score by Iteration** | Shows whether the overall staffing plan is improving. Lower is better. |
+
+## Recommended Default Settings
+
+For a realistic staffing recommendation, start with:
+
+| Setting | Recommended Default |
+|---|---:|
+| Optimization Objective | Balanced optimization |
+| Target SLA compliance % | 95% |
+| Target max utilization % | 90–92% |
+| Minimum recommended utilization % | 70% |
+| Max cases finished after shift | 0 |
+| Max extra staff allowed | 35 |
+| Staff cost penalty | Medium |
+
+For cycle-time reduction, use:
+
+| Setting | Recommended Default |
+|---|---:|
+| Optimization Objective | Reduce cycle time |
+| Target average cycle time hours | Lower than current average |
+| Minimum recommended utilization % | 70% |
+| Staff cost penalty | High |
+
+## Example Interpretation
+
+If the utilization chart shows:
+
+```text
+Current:
+Pharmacy Review = 442%
+Prior Authorization = 335%
+Intake = 82%
+
+Recommended:
+Pharmacy Review = 124%
+Prior Authorization = 93%
+Intake = 82%
+```
+
+Then the recommendation is reasonable because it focused on overloaded stations.
+
+If the recommendation shows:
+
+```text
+Recommended Intake utilization = 42%
+```
+
+while other stations are still above target, that would be unreasonable. The minimum utilization floor and rejected-actions logic are designed to prevent that.
+
+<!-- OPTIMIZATION_TAB_GUIDE_END -->
